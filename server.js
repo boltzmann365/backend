@@ -12,15 +12,14 @@ const allowedOrigins = [
   "http://localhost:3000",
   "https://localhost:3000",
   "http://localhost:3001",
-  "https://trainwithme-backend.vercel.app", // Allow backend's own domain
+  "https://trainwithme-backend.vercel.app",
+  "https://trainwithme-backend-fpbqr9rqr-yogesh-yadavs-projects-b7fc36f0.vercel.app"
 ];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g., server-to-server, Postman)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      callback(null, origin);
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, origin || '*'); // Allow no-origin requests (e.g., Postman)
     } else {
       console.warn(`Blocked CORS request from origin: ${origin}`);
       callback(new Error(`CORS policy: Origin ${origin} not allowed`));
@@ -29,7 +28,7 @@ app.use(cors({
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
-  optionsSuccessStatus: 204, // Ensure preflight requests return 204
+  optionsSuccessStatus: 204
 }));
 
 // Log all requests for debugging
@@ -54,7 +53,7 @@ async function connectToMongoDB(uri) {
     maxPoolSize: 10,
     connectTimeoutMS: 20000,
     serverSelectionTimeoutMS: 20000,
-    socketTimeoutMS: 45000, // Replace keepAlive with socketTimeoutMS
+    socketTimeoutMS: 45000,
     retryWrites: true,
     retryReads: true,
     w: 'majority'
@@ -123,6 +122,7 @@ connectToMongoDB(process.env.MONGODB_URI).then(({ db: database, mongoConnected: 
   console.error("MongoDB connection failed permanently:", err.message, err.stack);
   mongoConnected = false;
 });
+
 // Category to Book Map
 const categoryToBookMap = {
   TamilnaduHistory: { bookName: "Tamilnadu History Book" },
@@ -138,6 +138,23 @@ const categoryToBookMap = {
   PreviousYearPapers: { bookName: "Disha Publication’s UPSC Prelims Previous Year Papers" },
   Polity: { bookName: "Laxmikanth Book" }
 };
+
+// Health Check Endpoint
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "OK",
+    mongoConnected,
+    message: "TrainWithMe Backend API",
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Routes for 404 Handling
+app.get("/", (req, res) => {
+  res.status(200).json({ status: "OK", message: "TrainWithMe Backend API", mongoConnected });
+});
+app.get("/favicon.ico", (req, res) => res.status(204).end());
+app.get("/favicon.png", (req, res) => res.status(204).end());
 
 // Endpoint to fetch MCQs for a specified book/category for a user
 app.post("/user/get-book-mcqs", async (req, res) => {
@@ -516,11 +533,17 @@ app.post("/admin/generate-current-affairs-article", async (req, res) => {
       console.error("MongoDB not connected");
       return res.status(503).json({ error: "Database not connected" });
     }
+    if (!process.env.OPENAI_API_KEY) {
+      console.error("OPENAI_API_KEY is not set");
+      return res.status(500).json({ error: "Server configuration error: Missing OpenAI API key" });
+    }
+
     const document = await db.collection("parsed_current_affairs").findOne({ _id: new ObjectId(documentId) });
     if (!document) {
       return res.status(404).json({ error: "Document not found" });
     }
-    // Placeholder: Implement your article generation logic here
+
+    // Placeholder for OpenAI integration (implement your logic here)
     const articles = [
       {
         heading: document.job_metadata?.title || document.title || "Generated Article",
@@ -531,6 +554,7 @@ app.post("/admin/generate-current-affairs-article", async (req, res) => {
         createdAt: new Date()
       }
     ];
+
     await db.collection("current_affairs_articles").insertMany(articles);
     console.log(`Generated ${articles.length} articles for document ${documentId}`);
     res.status(200).json({ articles });
@@ -538,6 +562,15 @@ app.post("/admin/generate-current-affairs-article", async (req, res) => {
     console.error("Error generating articles:", error.message, error.stack);
     res.status(500).json({ error: "Failed to generate articles", details: error.message });
   }
+});
+
+// Global Error Middleware
+app.use((err, req, res, next) => {
+  console.error(`Unhandled error: ${err.message}, Stack: ${err.stack}`);
+  res.status(500).json({
+    error: "Internal server error",
+    details: err.message || "An unexpected error occurred"
+  });
 });
 
 // Export for Vercel serverless
