@@ -1,5 +1,5 @@
 const express = require("express");
-const cors = require("cors"); // Single declaration
+const cors = require("cors");
 const dotenv = require("dotenv");
 const { MongoClient, ObjectId } = require("mongodb");
 
@@ -10,7 +10,8 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:3000",
   "https://trainwithme.in",
-  "https://backend-production-d60b.up.railway.app" // Replace with your Railway app URL
+  "https://backend-production-d60b.up.railway.app", // Backend URL
+  "https://your-frontend.up.railway.app" // Replace with your frontend Railway URL
 ];
 
 app.use(
@@ -23,9 +24,21 @@ app.use(
         callback(new Error("Not allowed by CORS"));
       }
     },
-    credentials: true // Only if using cookies
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
   })
 );
+
+// Ensure CORS headers for all responses, including errors
+app.use((req, res, next) => {
+  res.on('finish', () => {
+    if (!res.get('Access-Control-Allow-Origin')) {
+      res.set('Access-Control-Allow-Origin', allowedOrigins.includes(req.headers.origin) ? req.headers.origin : '*');
+    }
+  });
+  next();
+});
 
 // Log all requests for debugging
 app.use((req, res, next) => {
@@ -44,7 +57,7 @@ async function connectToMongoDB(uri) {
     console.error("MONGODB_URI is undefined or not set in environment variables");
     throw new Error("MONGODB_URI is not defined");
   }
-  console.log("Using MONGODB_URI:", uri.replace(/:([^:@]+)@/, ':****@')); // Mask password
+  console.log("Using MONGODB_URI:", uri.replace(/:([^:@]+)@/, ':****@'));
   const client = new MongoClient(uri, {
     maxPoolSize: 10,
     connectTimeoutMS: 30000,
@@ -89,7 +102,6 @@ async function connectToMongoDB(uri) {
       );
       console.log("MongoDB indexes created");
 
-      // Monitor connection
       client.on('error', (err) => {
         console.error("MongoDB client error:", err.message);
         mongoConnected = false;
@@ -106,7 +118,7 @@ async function connectToMongoDB(uri) {
         throw error;
       }
       attempt++;
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5s
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
   }
 }
@@ -159,7 +171,6 @@ app.post("/user/get-book-mcqs", async (req, res) => {
     console.log("Request body:", req.body);
     const { userId, book, requestedCount, position } = req.body;
 
-    // Validate request parameters
     if (!userId) {
       console.log("Validation failed: Missing userId");
       return res.status(400).json({ error: "Missing userId in request body" });
@@ -188,25 +199,20 @@ app.post("/user/get-book-mcqs", async (req, res) => {
 
     const category = book;
 
-    // Fetch seen MCQ IDs for the user
     const seenMcqs = await db.collection("user_seen_mcqs")
       .find({ userId })
       .toArray();
     const seenMcqIds = seenMcqs.map(entry => entry.mcqId);
 
-    // Fetch all MCQ IDs for the specified category
     const categoryMcqs = await db.collection("mcqs")
       .find({ category })
       .toArray();
     const categoryMcqIds = categoryMcqs.map(mcq => mcq._id.toString());
 
-    // Filter seen MCQs to only include those in the specified category
     const seenCategoryMcqIds = seenMcqIds.filter(id => categoryMcqIds.includes(id));
 
-    // Fetch unseen MCQs
     let mcqs;
     if (requestedCount === 0) {
-      // LAW mode
       const query = {
         category,
         _id: { $nin: seenCategoryMcqIds.map(id => new ObjectId(id)) }
@@ -225,7 +231,6 @@ app.post("/user/get-book-mcqs", async (req, res) => {
         .toArray();
       console.log(`LAW mode: Fetched ${mcqs.length} MCQ(s) at position ${position !== undefined ? position : 0} for user ${userId} in category ${category}`);
     } else {
-      // WIS mode
       mcqs = await db.collection("mcqs")
         .find({
           category,
@@ -462,7 +467,7 @@ app.get("/battleground/leaderboard", async (req, res) => {
 // Endpoint to fetch current affairs articles
 app.get("/admin/get-current-affairs-articles", async (req, res) => {
   try {
-    console.log(`Received request for articles: Query=${JSON.stringify(req.query)}, Origin=${req.headers.origin || 'none'}`);
+    console.log(`Fetching articles: Query=${JSON.stringify(req.query)}, Origin=${req.headers.origin || 'none'}`);
     if (!mongoConnected || !db) {
       console.error("MongoDB not connected");
       return res.status(503).json({ error: "Database not connected" });
@@ -500,9 +505,10 @@ app.get("/admin/get-current-affairs-articles", async (req, res) => {
   }
 });
 
-// Endpoint to fetch parsed current affairs documents (for NewsGenerator)
+// Endpoint to fetch parsed current affairs documents
 app.get("/admin/get-parsed-current-affairs", async (req, res) => {
   try {
+    console.log(`Fetching parsed documents: Origin=${req.headers.origin || 'none'}`);
     if (!mongoConnected || !db) {
       console.error("MongoDB not connected");
       return res.status(503).json({ error: "Database not connected" });
@@ -519,7 +525,7 @@ app.get("/admin/get-parsed-current-affairs", async (req, res) => {
   }
 });
 
-// Endpoint to generate current affairs articles (for NewsGenerator)
+// Endpoint to generate current affairs articles
 app.post("/admin/generate-current-affairs-article", async (req, res) => {
   try {
     const { documentId } = req.body;
@@ -535,7 +541,6 @@ app.post("/admin/generate-current-affairs-article", async (req, res) => {
       return res.status(404).json({ error: "Document not found" });
     }
 
-    // Placeholder for OpenAI integration
     const articles = [
       {
         heading: document.job_metadata?.title || document.title || "Generated Article",
@@ -559,6 +564,7 @@ app.post("/admin/generate-current-affairs-article", async (req, res) => {
 // Global Error Middleware
 app.use((err, req, res, next) => {
   console.error(`Unhandled error: ${err.message}, Stack: ${err.stack}`);
+  res.setHeader('Access-Control-Allow-Origin', allowedOrigins.includes(req.headers.origin) ? req.headers.origin : '*');
   res.status(500).json({
     error: "Internal server error",
     details: err.message || "An unexpected error occurred"
@@ -566,10 +572,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start the server
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
-
-// Export for Vercel serverless (optional, can be removed if only using Railway)
-module.exports = app;
