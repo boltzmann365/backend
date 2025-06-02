@@ -13,13 +13,16 @@ const allowedOrigins = [
   "https://localhost:3000",
   "http://localhost:3001",
   "https://trainwithme-backend.vercel.app",
-  "https://trainwithme-backend-fpbqr9rqr-yogesh-yadavs-projects-b7fc36f0.vercel.app"
+  "https://trainwithme-backend-fpbqr9rqr-yogesh-yadavs-projects-b7fc36f0.vercel.app",
+  "https://backend-lyart-one-89.vercel.app",
+  "https://backend-krowav4fm-yogesh-yadavs-projects-b7fc36f0.vercel.app",
+  "https://backend-n5ubeeejd-yogesh-yadavs-projects-b7fc36f0.vercel.app"
 ];
 
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, origin || '*'); // Allow no-origin requests (e.g., Postman)
+      callback(null, origin || '*');
     } else {
       console.warn(`Blocked CORS request from origin: ${origin}`);
       callback(new Error(`CORS policy: Origin ${origin} not allowed`));
@@ -51,12 +54,13 @@ async function connectToMongoDB(uri) {
   console.log("Using MONGODB_URI:", uri.replace(/:([^:@]+)@/, ':****@')); // Mask password
   const client = new MongoClient(uri, {
     maxPoolSize: 10,
-    connectTimeoutMS: 20000,
-    serverSelectionTimeoutMS: 20000,
+    connectTimeoutMS: 30000,
+    serverSelectionTimeoutMS: 30000,
     socketTimeoutMS: 45000,
     retryWrites: true,
     retryReads: true,
-    w: 'majority'
+    w: 'majority',
+    serverApi: { version: '1', strict: true, deprecationErrors: true }
   });
   const maxRetries = 5;
   let attempt = 1;
@@ -322,10 +326,9 @@ app.post("/user/report-mcq", async (req, res) => {
   } catch (error) {
     console.error("Error reporting MCQ:", error.message, error.stack);
     if (error.code === 11000) {
-      res.status(400).json({ error: "This MCQ has already been reported by this user" });
-    } else {
-      res.status(500).json({ error: "Failed to report MCQ", details: error.message });
+      return res.status(400).json({ error: "This MCQ has already been reported by this user" });
     }
+    res.status(500).json({ error: "Failed to report MCQ", details: error.message });
   }
 });
 
@@ -466,6 +469,7 @@ app.get("/battleground/leaderboard", async (req, res) => {
 // Endpoint to fetch current affairs articles
 app.get("/admin/get-current-affairs-articles", async (req, res) => {
   try {
+    console.log(`Received request for articles: Query=${JSON.stringify(req.query)}, Origin=${req.headers.origin || 'none'}`);
     if (!mongoConnected || !db) {
       console.error("MongoDB not connected");
       return res.status(503).json({ error: "Database not connected" });
@@ -533,17 +537,12 @@ app.post("/admin/generate-current-affairs-article", async (req, res) => {
       console.error("MongoDB not connected");
       return res.status(503).json({ error: "Database not connected" });
     }
-    if (!process.env.OPENAI_API_KEY) {
-      console.error("OPENAI_API_KEY is not set");
-      return res.status(500).json({ error: "Server configuration error: Missing OpenAI API key" });
-    }
-
     const document = await db.collection("parsed_current_affairs").findOne({ _id: new ObjectId(documentId) });
     if (!document) {
       return res.status(404).json({ error: "Document not found" });
     }
 
-    // Placeholder for OpenAI integration (implement your logic here)
+    // Placeholder for OpenAI integration
     const articles = [
       {
         heading: document.job_metadata?.title || document.title || "Generated Article",
@@ -572,6 +571,14 @@ app.use((err, req, res, next) => {
     details: err.message || "An unexpected error occurred"
   });
 });
+
+// Start the server locally if not in a serverless environment
+if (require.main === module) {
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+  });
+}
 
 // Export for Vercel serverless
 module.exports = app;
