@@ -7,32 +7,28 @@ dotenv.config();
 const app = express();
 
 // CORS Configuration
+const cors = require("cors");
+
 const allowedOrigins = [
-  "https://trainwithme.in",
-  "http://localhost:3000",
-  "https://localhost:3000",
-  "http://localhost:3001",
-  "https://trainwithme-backend.vercel.app",
-  "https://trainwithme-backend-fpbqr9rqr-yogesh-yadavs-projects-b7fc36f0.vercel.app",
-  "https://backend-lyart-one-89.vercel.app",
-  "https://backend-krowav4fm-yogesh-yadavs-projects-b7fc36f0.vercel.app",
-  "https://backend-n5ubeeejd-yogesh-yadavs-projects-b7fc36f0.vercel.app"
+  "http://localhost:3000", // development
+  "https://trainwithme.in", // production
+  "https://backend-production-d60b.up.railway.app" // backend origin if ever called directly
 ];
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, origin || '*');
-    } else {
-      console.warn(`Blocked CORS request from origin: ${origin}`);
-      callback(new Error(`CORS policy: Origin ${origin} not allowed`));
-    }
-  },
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
-  optionsSuccessStatus: 204
-}));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      console.log("Incoming CORS origin:", origin);
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true // only if you are sending cookies
+  })
+);
+
 
 // Log all requests for debugging
 app.use((req, res, next) => {
