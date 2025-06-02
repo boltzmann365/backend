@@ -1,5 +1,5 @@
 const express = require("express");
-const cors = require("cors");
+const cors = require("cors"); // Single declaration
 const dotenv = require("dotenv");
 const { MongoClient, ObjectId } = require("mongodb");
 
@@ -7,11 +7,10 @@ dotenv.config();
 const app = express();
 
 // CORS Configuration
-const cors = require("cors");
-
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://trainwithme.in"
+  "https://trainwithme.in",
+  "https://backend-production-d60b.up.railway.app" // Replace with your Railway app URL
 ];
 
 app.use(
@@ -20,14 +19,13 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        console.warn(`CORS blocked for origin: ${origin}`);
         callback(new Error("Not allowed by CORS"));
       }
     },
-    credentials: true // Only if you're using cookies
+    credentials: true // Only if using cookies
   })
 );
-
-
 
 // Log all requests for debugging
 app.use((req, res, next) => {
@@ -567,13 +565,11 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start the server locally if not in a serverless environment
-if (require.main === module) {
-  const PORT = process.env.PORT || 3001;
-  app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-  });
-}
+// Start the server
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
 
-// Export for Vercel serverless
+// Export for Vercel serverless (optional, can be removed if only using Railway)
 module.exports = app;
