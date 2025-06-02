@@ -10,24 +10,23 @@ const app = express();
 const cors = require("cors");
 
 const allowedOrigins = [
-  "http://localhost:3000", // development
-  "https://trainwithme.in", // production
-  "https://backend-production-d60b.up.railway.app" // backend origin if ever called directly
+  "http://localhost:3000",
+  "https://trainwithme.in"
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      console.log("Incoming CORS origin:", origin);
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));
       }
     },
-    credentials: true // only if you are sending cookies
+    credentials: true // Only if you're using cookies
   })
 );
+
 
 
 // Log all requests for debugging
